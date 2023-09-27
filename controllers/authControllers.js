@@ -5,9 +5,20 @@ const {promisify} = require('util');
 const bcrypt = require('bcryptjs');
 const AppError = require('../utils/appError');
 const jwt = require('jsonwebtoken');
-const catchasync = require('../utils/catchAsync');
+const catchasync = require('../utils/catchAsync');  
+const sendEmail = require('../utils/email');
 
 
+const makescookie = (res,token) => {
+    const cookieOptions = { 
+        expires:  process.env.JWT_COOKIE_EXPIRES_IN*24*60*60*1000,
+    //     expires: new Date(
+    //     Date.now() + process.env.JWT_COOKIE_EXPIRES_IN*24*60*60*1000
+    // ),
+        httpOnly:true
+    }
+    res.cookie('jwt',token,cookieOptions)
+}
 exports.signUp = catchasync(async(req,res,next) => {
     const newUser = await User.create({
         name : req.body.name ,
@@ -19,7 +30,8 @@ exports.signUp = catchasync(async(req,res,next) => {
     const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, {
         expiresIn: process.env.JWT_EXPIRES_IN
       });
-      
+      newUser.password = undefined
+    makescookie(res,token)
     res.status(201).json({
         status: 'success',
         token ,
@@ -48,6 +60,7 @@ const correct= await bcrypt.compare(password,user.password)
         expiresIn: process.env.JWT_EXPIRES_IN
       });
       ;
+    makescookie(res,token)
     res.status(200).json({
         status:'success',
         token: token,
@@ -75,11 +88,14 @@ exports.protect = catchasync(async(req, res,next) => {
     
     //3) check if user still exits
 const currUser = await User.findById(decoded.id);
+
 if(!currUser){
   return next(new AppError('the user no longer exits',401));
 }
-    //4) if user changed password after token was issued 
-    req.user = currUser;
+ //4) if user changed password after token was issued 
+// do this save user data and use in next func
+ req.user = currUser;
+ console.log(req.user)
     //custom property be added to request
     next();
 })
@@ -98,19 +114,54 @@ exports.forgetPassword = catchasync(async(req, res, next) => {
     if (!user){
         next(new AppError('no user with email ',404));
     }
-    const restToken = user.createResetToken();
+    const resetToken = await user.createResetToken();
     await user.save({validateBeforeSave:false});
-});
+    //send it to email of user 
+    const resetURL = `${req.protocol}://${req.get(
+        'host'
+      )}/api/v1/users/resetPassword/${resetToken}`;
+    const message = `forget password this URl ${req.protocol}://${req.get(
+        'host'
+      )}/api/v1/users/resetPassword/${resetToken}`;
+    try{
+     sendEmail({
+        email:user.email,
+        subject:`Your password rest token valid for 10 min `,
+        message,
+    });
+    makescookie(res,token)
+    res.status(200).json({
+        status: 'success',
+        message: 'token send to your mail'
+    })
+    }   
+    catch(err){ 
+        console.log(err);
+    }
+    });
 exports.resetPassword = catchasync(async(req, res, next) =>{
 
 });
-exports.updatePassword = catchasync(async(req, res, next) =>{
-    const user = await User
-    .findById(req.user._id).select('+password');
-    if(!(req.body.password === user.password)){
-        next(new AppError('your current password is wrong',401))
+exports.updatePassword = catchasync(async(req,res,next)=>{
+    console.log(req.user.id);
+    const user = await User.findById(req.user.id).select('+password')
+    if (!user) {
+        return next(new AppError('User not found', 404)); // Handle the case where the user is not found
+    }
+    const correctPassword = await bcrypt.compare(req.body.currentPassword,user.password)
+    if(!correctPassword){
+        return next(new AppError('wrong old passwoed',401))
     }
     user.password = req.body.password
-    user.confirmpassword=req.body.confirmpassword
-    await user.save({validateBeforeSave:false})
+    user.confirmpassword = req.body.confirmpassword
+    await user.save();
+
+   const token = jwt.sign({id : user._id},process.env.JWT_SECRET,{
+    expiresIn:process.env.JWT_EXPIRES_IN
 })
+makescookie(res,token)
+    res.status(200).json({
+        status : 'success',
+        token : token
+    })
+});
