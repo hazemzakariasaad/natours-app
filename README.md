@@ -1,6 +1,3 @@
-# Natours App API
-
-![Project Logo](link-to-your-logo.png) (If you have one)
 
 ## Project Overview
 
