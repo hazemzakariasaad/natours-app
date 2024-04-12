@@ -1,8 +1,8 @@
 const fs = require('fs');
 const express = require('express');
-const Tour = require('./../models/tourModel');
-const catchasync = require('./../utils/catchAsync');
-const APIFeatures = require('./../utils/apiFeatures');
+const Tour = require('../models/tourModel');
+const catchasync = require('../utils/catchAsync');
+const APIFeatures = require('../utils/apiFeatures');
 const AppError = require('../utils/appError');
 
 // const tours = JSON.parse(

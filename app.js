@@ -36,6 +36,7 @@ const limiter = ratelimit({
 app.use('/app', limiter);
 app.use(morgan('dev'));
 app.use(express.json());
+console.log("Middleware should be executed before this line.");
 app.use((req, res, next) => {
   console.log('Hello, world from Middleware!');
   console.log(req.headers);
